@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>マルバツ戦記</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --accent1: #e94560;
+    --accent2: #0f3460;
+    --circle-col: #4ecdc4;
+    --tri-col: #ff6b6b;
+    --gold: #ffd700;
+    --text: #eaeaea;
+    --muted: #888;
+    --card-bg: #0d1b2a;
+    --card-border: #2a3a5c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    gap: 8px;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--circle-col), var(--tri-col));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 0.05em;
+    margin-bottom: 0;
+  }
+
+  .subtitle { font-size: 0.75rem; color: var(--muted); }
+
+  .game-area {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    max-width: 860px;
+  }
+
+  /* ===== BOARD ===== */
+  .board-section { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 108px);
+    grid-template-rows: repeat(3, 108px);
+    gap: 6px;
+    background: var(--accent2);
+    padding: 8px;
+    border-radius: 12px;
+    border: 2px solid #2a3a6a;
+  }
+
+  .cell {
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 2px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+
+  .cell:hover:not(.occupied) { border-color: var(--gold); background: #1a2a40; }
+
+  @keyframes pop { 0%{transform:scale(0.4);opacity:0} 70%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+  @keyframes push-flash { 0%{background:#3a1a1a} 100%{background:var(--card-bg)} }
+  @keyframes winner-glow { 0%,100%{box-shadow:0 0 14px 4px rgba(255,215,0,0.8)} 50%{box-shadow:0 0 28px 10px rgba(255,215,0,0.4)} }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes pop-overlay { 0%{transform:scale(0.7);opacity:0} 100%{transform:scale(1);opacity:1} }
+
+  .cell.placed { animation: pop 0.28s ease-out; }
+  .cell.pushed-out { animation: push-flash 0.4s ease-out; }
+  .cell.win-cell { border-color: var(--gold) !important; animation: winner-glow 0.8s ease-in-out infinite; }
+
+  /* ===== STATUS ===== */
+  #status {
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 7px 20px;
+    border-radius: 20px;
+    background: var(--panel);
+    border: 1px solid var(--card-border);
+    min-width: 220px;
+    text-align: center;
+  }
+
+  #cpu-thinking {
+    font-size: 0.8rem;
+    color: var(--muted);
+    height: 18px;
+    animation: blink 1s infinite;
+    visibility: hidden;
+  }
+  #cpu-thinking.show { visibility: visible; }
+
+  /* ===== SIDE PANELS ===== */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 150px;
+  }
+
+  .player-info {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 10px 10px;
+    border: 2px solid var(--card-border);
+    transition: border-color 0.2s;
+  }
+  .player-info.active { border-color: var(--gold); }
+
+  .player-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 5px;
+  }
+  .player-label.circle { color: var(--circle-col); }
+  .player-label.tri { color: var(--tri-col); }
+
+  .deck-count { font-size: 0.72rem; color: var(--muted); margin-bottom: 7px; }
+
+  .hand-cards { display: flex; flex-direction: column; gap: 5px; }
+
+  .hand-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 8px;
+    padding: 3px 6px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .hand-card:hover { border-color: #4a6a9c; }
+  .hand-card.selected { border-color: var(--gold); background: #162035; }
+  .hand-card.cpu-card { cursor: default; opacity: 0.7; }
+
+  .card-info { font-size: 0.62rem; color: var(--muted); line-height: 1.5; }
+
+  /* ===== RULES ===== */
+  .rules-toggle {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    cursor: pointer;
+    text-align: center;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+  .rules-toggle:hover { color: var(--text); }
+
+  #rules-box {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 0.7rem;
+    line-height: 1.8;
+    max-width: 360px;
+    color: #ccc;
+  }
+  #rules-box.open { display: block; }
+  #rules-box h3 { font-size: 0.8rem; color: var(--gold); margin-bottom: 4px; margin-top: 8px; }
+  #rules-box h3:first-child { margin-top: 0; }
+  #rules-box ul { padding-left: 14px; }
+  #rules-box li { margin-bottom: 2px; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    background: var(--accent1);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.82; }
+  .btn.secondary { background: var(--accent2); }
+
+  /* ===== OVERLAY ===== */
+  #overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.78);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  #overlay.show { display: flex; }
+
+  .overlay-box {
+    background: var(--panel);
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    padding: 36px 48px;
+    text-align: center;
+    animation: pop-overlay 0.32s ease-out;
+  }
+  .overlay-box h2 { font-size: 2rem; font-weight: 900; margin-bottom: 6px; }
+  .overlay-box p { color: var(--muted); margin-bottom: 22px; font-size: 0.9rem; }
+
+  .push-log {
+    font-size: 0.68rem;
+    color: #aaa;
+    min-height: 18px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>マルバツ戦記</h1>
+<p class="subtitle">CPU対戦 — あなたは☺マル、CPUは△バツ</p>
+
+<div class="game-area">
+  <!-- Player side -->
+  <div class="side-panel">
+    <div class="player-info" id="circle-info">
+      <div class="player-label circle">☺ あなた（マル）</div>
+      <div class="deck-count" id="circle-deck">山札: 12枚</div>
+      <div class="hand-cards" id="circle-hand"></div>
+    </div>
+  </div>
+
+  <!-- Board -->
+  <div class="board-section">
+    <div id="status">カードを選んでマスに置こう</div>
+    <div id="cpu-thinking">CPU思考中…</div>
+    <div id="board"></div>
+    <div class="push-log" id="push-log"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn secondary" onclick="resetGame()">最初から</button>
+      <button class="btn secondary rules-toggle" onclick="document.getElementById('rules-box').classList.toggle('open')">📖 ルール</button>
+    </div>
+    <div id="rules-box">
+      <h3>勝敗条件</h3>
+      <ul>
+        <li>☺マルが縦・横・斜めに<strong>3つ並んだら勝ち</strong></li>
+        <li>△バツが3つ並んだら<strong>負け</strong></li>
+        <li>ボードが埋まったら<strong>引き分け</strong></li>
+      </ul>
+      <h3>手番の流れ</h3>
+      <ul>
+        <li>手札からカードを1枚選び、空きマスに置く</li>
+        <li>置いたら山札から1枚補充（手札は常に最大3枚）</li>
+        <li>あなた（マル）が先攻</li>
+      </ul>
+      <h3>攻撃とブロック</h3>
+      <ul>
+        <li>カードには<strong>攻撃方向</strong>（矢印）と<strong>ブロック面</strong>（太辺）がある</li>
+        <li>置いた瞬間、攻撃方向に相手カードがあれば<strong>押し出す</strong></li>
+        <li>押し出された先が空きなら移動、埋まっていれば盤外（山札に戻る）</li>
+        <li>相手カードのブロック面が攻撃方向を向いていれば<strong>無効</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CPU side -->
+  <div class="side-panel">
+    <div class="player-info" id="tri-info">
+      <div class="player-label tri">△ CPU（バツ）</div>
+      <div class="deck-count" id="tri-deck">山札: 12枚</div>
+      <div class="hand-cards" id="tri-hand"></div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="overlay-box">
+    <h2 id="overlay-title"></h2>
+    <p id="overlay-sub"></p>
+    <button class="btn" onclick="resetGame()">もう一度</button>
+  </div>
+</div>
+
+<script>
+// =============================================
+// CONSTANTS
+// Directions: 0=Up 1=Right 2=Down 3=Left
+// =============================================
+const DIR_VEC = [{r:-1,c:0},{r:0,c:1},{r:1,c:0},{r:0,c:-1}];
+const DIR_LABEL = ['↑','→','↓','←'];
+const DIR_NAME  = ['上','右','下','左'];
+
+const WIN_LINES = [
+  [0,1,2],[3,4,5],[6,7,8],   // rows
+  [0,3,6],[1,4,7],[2,5,8],   // cols
+  [0,4,8],[2,4,6],           // diags
+];
+
+// =============================================
+// CARD GENERATION
+// Each shape has 4 attack dirs × 3 copies = 12
+// Block face = opposite of attack direction
+// =============================================
+function makeCard(shape, attackDir, id) {
+  const blockDir = (attackDir + 2) % 4; // opposite
+  return { shape, attackDir, blockDir, id };
+}
+
+function makeDeck(shape, owner) {
+  const cards = [];
+  for (let d = 0; d < 4; d++) {
+    for (let n = 0; n < 3; n++) {
+      cards.push({ ...makeCard(shape, d, `${owner}_${d}_${n}`), owner });
+    }
+  }
+  return shuffle(cards);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// =============================================
+// SVG RENDERERS
+// =============================================
+function cardSVG(card, size) {
+  if (!card) return '';
+  const s = size || 80;
+  return card.shape === 'circle' ? circleSVG(card, s) : triSVG(card, s);
+}
+
+const ARROW = (ax, ay, rot) =>
+  `<g transform="translate(${ax},${ay}) rotate(${rot})"><polygon points="0,-7 6,4 -6,4" fill="currentColor" opacity="0.95"/></g>`;
+
+const BLOCK_EDGES = [
+  'M6,6 L74,6',   // top
+  'M74,6 L74,74', // right
+  'M74,74 L6,74', // bottom
+  'M6,74 L6,6',   // left
+];
+
+const ARROW_POS = [
+  {x:40,y:10,rot:0},
+  {x:70,y:40,rot:90},
+  {x:40,y:70,rot:180},
+  {x:10,y:40,rot:270},
+];
+
+function circleSVG(card, s) {
+  const col = '#4ecdc4';
+  const blockCol = '#1a7a6e';
+  const ap = ARROW_POS[card.attackDir];
+  return `<svg viewBox="0 0 80 80" width="${s}" height="${s}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="3" y="3" width="74" height="74" rx="9" fill="#0a1628" stroke="#1e3a5f" stroke-width="2"/>
+    <path d="${BLOCK_EDGES[card.blockDir]}" stroke="${blockCol}" stroke-width="6" stroke-linecap="round"/>
+    <g color="${col}">
+      <circle cx="40" cy="40" r="21" fill="none" stroke="${col}" stroke-width="2.5"/>
+      <circle cx="33" cy="36" r="2.5" fill="${col}"/>
+      <circle cx="47" cy="36" r="2.5" fill="${col}"/>
+      <path d="M32,48 Q40,55 48,48" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>
+      ${ARROW(ap.x, ap.y, ap.rot)}
+    </g>
+  </svg>`;
+}
+
+function triSVG(card, s) {
+  const col = '#ff6b6b';
+  const blockCol = '#8b1a1a';
+  const ap = ARROW_POS[card.attackDir];
+  return `<svg viewBox="0 0 80 80" width="${s}" height="${s}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="3" y="3" width="74" height="74" rx="9" fill="#1a0a0a" stroke="#5f1e1e" stroke-width="2"/>
+    <path d="${BLOCK_EDGES[card.blockDir]}" stroke="${blockCol}" stroke-width="6" stroke-linecap="round"/>
+    <g color="${col}">
+      <polygon points="40,14 64,62 16,62" fill="none" stroke="${col}" stroke-width="2.5"/>
+      <circle cx="33" cy="50" r="2.2" fill="${col}"/>
+      <circle cx="47" cy="50" r="2.2" fill="${col}"/>
+      <path d="M33,56 Q40,62 47,56" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/>
+      ${ARROW(ap.x, ap.y, ap.rot)}
+    </g>
+  </svg>`;
+}
+
+// =============================================
+// GAME STATE
+// =============================================
+let G; // global game state
+
+function initState() {
+  G = {
+    board: Array(9).fill(null),
+    turn: 'circle',
+    decks: {
+      circle: makeDeck('circle','circle'),
+      tri:    makeDeck('tri','tri'),
+    },
+    hands: { circle:[], tri:[] },
+    selected: null, // hand index
+    over: false,
+    winner: null,
+  };
+  drawCards('circle', 3);
+  drawCards('tri', 3);
+}
+
+function drawCards(owner, n) {
+  for (let i=0; i<n && G.decks[owner].length>0 && G.hands[owner].length<3; i++) {
+    G.hands[owner].push(G.decks[owner].pop());
+  }
+}
+
+// =============================================
+// GAME LOGIC
+// =============================================
+function placeCard(owner, handIdx, cellIdx) {
+  if (G.over) return;
+  if (G.board[cellIdx] !== null) return;
+
+  const card = { ...G.hands[owner][handIdx] };
+  G.hands[owner].splice(handIdx, 1);
+  G.selected = null;
+
+  // Place
+  G.board[cellIdx] = card;
+
+  // Push effect
+  const pushMsg = applyPush(card, cellIdx);
+
+  // Draw
+  drawCards(owner, 1);
+
+  // Check win/lose
+  const opp = owner === 'circle' ? 'tri' : 'circle';
+  const myLine  = checkWin(owner);
+  const oppLine = checkWin(opp);
+
+  if (myLine) {
+    finishGame(owner === 'circle' ? 'win' : 'lose', myLine, pushMsg);
+    return;
+  }
+  if (oppLine) {
+    finishGame(owner === 'circle' ? 'lose' : 'win', oppLine, pushMsg);
+    return;
+  }
+  if (G.board.every(c => c !== null)) {
+    finishGame('draw', null, pushMsg);
+    return;
+  }
+
+  G.turn = opp;
+  render(pushMsg);
+
+  if (G.turn === 'tri') {
+    setTimeout(cpuTurn, 750);
+  }
+}
+
+function applyPush(card, cellIdx) {
+  const row = Math.floor(cellIdx / 3);
+  const col = cellIdx % 3;
+  const vec = DIR_VEC[card.attackDir];
+  const tr = row + vec.r;
+  const tc = col + vec.c;
+
+  if (tr < 0 || tr > 2 || tc < 0 || tc > 2) return '';
+
+  const tIdx = tr*3 + tc;
+  const target = G.board[tIdx];
+  if (!target || target.owner === card.owner) return '';
+
+  // Check block: target's block face must face the attacker
+  // Attacker is at cellIdx, so target's block face toward attacker = opposite of attackDir
+  const attackFromDir = (card.attackDir + 2) % 4;
+  if (target.blockDir === attackFromDir) {
+    return `🛡 ブロック！ ${DIR_NAME[card.attackDir]}への攻撃は防がれた`;
+  }
+
+  // Push target in same direction
+  const nr = tr + vec.r;
+  const nc = tc + vec.c;
+  G.board[tIdx] = null;
+
+  if (nr >= 0 && nr <= 2 && nc >= 0 && nc <= 2) {
+    const nIdx = nr*3 + nc;
+    if (!G.board[nIdx]) {
+      G.board[nIdx] = target;
+      return `💥 押し出し！ ${DIR_NAME[card.attackDir]}へ移動`;
+    } else {
+      G.decks[target.owner].unshift(target);
+      return `💥 押し出し！ 盤外へ（山札に戻る）`;
+    }
+  } else {
+    G.decks[target.owner].unshift(target);
+    return `💥 押し出し！ 盤外へ（山札に戻る）`;
+  }
+}
+
+function checkWin(owner) {
+  return WIN_LINES.find(line =>
+    line.every(i => G.board[i] && G.board[i].owner === owner)
+  ) || null;
+}
+
+// =============================================
+// CPU AI
+// =============================================
+function cpuTurn() {
+  if (G.over) return;
+  showThinking(true);
+
+  setTimeout(() => {
+    showThinking(false);
+    const move = cpuBestMove();
+    if (move) placeCard('tri', move.h, move.c);
+  }, 500);
+}
+
+function cpuBestMove() {
+  const hand = G.hands.tri;
+  const empty = G.board.map((v,i) => v===null ? i : -1).filter(i => i>=0);
+  if (!hand.length || !empty.length) return null;
+
+  // 1. Win
+  for (let h=0; h<hand.length; h++)
+    for (const c of empty)
+      if (simWin('tri', h, c)) return {h,c};
+
+  // 2. Block player from winning
+  for (let h=0; h<hand.length; h++)
+    for (const c of empty)
+      if (simWin('circle', 0, c, true)) // would player win if they placed here?
+        return {h, c};
+
+  // 3. Strategic: center > corners > edges
+  const prio = [4,0,2,6,8,1,3,5,7];
+  for (const c of prio) {
+    if (G.board[c] === null) {
+      const h = Math.floor(Math.random()*hand.length);
+      return {h, c};
+    }
+  }
+  return {h:0, c:empty[0]};
+}
+
+function simWin(owner, handIdx, cellIdx, hypothetical=false) {
+  const sim = [...G.board];
+  const srcOwner = hypothetical ? 'circle' : owner;
+  // For hypothetical, use player's hand
+  const hands = hypothetical ? G.hands.circle : G.hands[owner];
+  if (!hands[handIdx]) return false;
+  sim[cellIdx] = { ...hands[handIdx], owner: srcOwner };
+  return WIN_LINES.some(line => line.every(i => sim[i] && sim[i].owner === srcOwner));
+}
+
+// =============================================
+// END GAME
+// =============================================
+function finishGame(result, winLine, pushMsg) {
+  G.over = true;
+  G.winner = result;
+
+  render(pushMsg);
+
+  if (winLine) {
+    setTimeout(() => {
+      winLine.forEach(i => {
+        const cells = document.querySelectorAll('.cell');
+        if (cells[i]) cells[i].classList.add('win-cell');
+      });
+    }, 80);
+  }
+
+  const overlay = document.getElementById('overlay');
+  const title   = document.getElementById('overlay-title');
+  const sub     = document.getElementById('overlay-sub');
+
+  setTimeout(() => {
+    overlay.classList.add('show');
+    if (result === 'win') {
+      title.textContent = '🎉 勝利！';
+      title.style.color = '#4ecdc4';
+      sub.textContent = 'マルが3つ並んだ！';
+    } else if (result === 'lose') {
+      title.textContent = '😈 敗北…';
+      title.style.color = '#ff6b6b';
+      sub.textContent = 'バツが3つ並んでしまった';
+    } else {
+      title.textContent = '🤝 引き分け';
+      title.style.color = '#aaa';
+      sub.textContent = 'ボードが埋まった！';
+    }
+  }, winLine ? 900 : 200);
+}
+
+// =============================================
+// RENDER
+// =============================================
+function render(pushMsg) {
+  renderBoard();
+  renderHands();
+  renderStatus();
+  if (pushMsg !== undefined) {
+    document.getElementById('push-log').textContent = pushMsg || '';
+  }
+}
+
+function renderBoard() {
+  const el = document.getElementById('board');
+  el.innerHTML = '';
+  for (let i=0; i<9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (G.board[i] ? ' occupied' : '');
+    cell.dataset.idx = i;
+    if (G.board[i]) {
+      cell.innerHTML = cardSVG(G.board[i], 84);
+    }
+    cell.addEventListener('click', () => onCellClick(i));
+    el.appendChild(cell);
+  }
+}
+
+function renderHands() {
+  renderOneHand('circle', false);
+  renderOneHand('tri', true);
+
+  document.getElementById('circle-info').classList.toggle('active', G.turn === 'circle' && !G.over);
+  document.getElementById('tri-info').classList.toggle('active',    G.turn === 'tri'    && !G.over);
+  document.getElementById('circle-deck').textContent = `山札: ${G.decks.circle.length}枚`;
+  document.getElementById('tri-deck').textContent    = `山札: ${G.decks.tri.length}枚`;
+}
+
+function renderOneHand(owner, isCPU) {
+  const el = document.getElementById(owner === 'circle' ? 'circle-hand' : 'tri-hand');
+  el.innerHTML = '';
+  G.hands[owner].forEach((card, idx) => {
+    const div = document.createElement('div');
+    const sel = !isCPU && G.selected === idx;
+    div.className = 'hand-card' + (sel ? ' selected' : '') + (isCPU ? ' cpu-card' : '');
+    div.innerHTML = `
+      ${cardSVG(card, 42)}
+      <div class="card-info">
+        攻撃: ${DIR_LABEL[card.attackDir]}<br>
+        ブロック: ${DIR_LABEL[card.blockDir]}
+      </div>`;
+    if (!isCPU) {
+      div.addEventListener('click', () => onCardSelect(idx));
+    }
+    el.appendChild(div);
+  });
+}
+
+function renderStatus() {
+  const el = document.getElementById('status');
+  if (G.over) {
+    el.textContent = G.winner === 'win' ? '🎉 あなたの勝ち！' : G.winner === 'lose' ? '😈 CPUの勝ち' : '🤝 引き分け';
+    return;
+  }
+  if (G.turn === 'circle') {
+    el.textContent = G.selected === null ? '☺ カードを選んでください' : '空きマスをタップして置く';
+  } else {
+    el.textContent = '△ CPUのターン…';
+  }
+}
+
+function showThinking(on) {
+  document.getElementById('cpu-thinking').classList.toggle('show', on);
+}
+
+// =============================================
+// INPUT HANDLERS
+// =============================================
+function onCardSelect(idx) {
+  if (G.turn !== 'circle' || G.over) return;
+  G.selected = G.selected === idx ? null : idx;
+  renderHands();
+  renderStatus();
+}
+
+function onCellClick(idx) {
+  if (G.turn !== 'circle' || G.over) return;
+  if (G.selected === null) {
+    document.getElementById('status').textContent = '先にカードを選んでください';
+    return;
+  }
+  if (G.board[idx]) {
+    document.getElementById('status').textContent = 'そのマスは埋まっています';
+    return;
+  }
+  placeCard('circle', G.selected, idx);
+}
+
+// =============================================
+// RESET
+// =============================================
+function resetGame() {
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('push-log').textContent = '';
+  initState();
+  render('');
+}
+
+// =============================================
+// BOOT
+// =============================================
+initState();
+render('');
+</script>
+</body>
+</html>
